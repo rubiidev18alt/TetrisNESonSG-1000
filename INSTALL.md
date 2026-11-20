@@ -1,50 +1,16 @@
-# Linux
+# Building the original NES disassembly
 
-	sudo apt-get install make gcc bison git python
-	pip install pillow
-	git clone https://github.com/CelestialAmber/TetrisNESDisasm
-	cd TetrisNESDisasm
-	git submodule update --init
+For the native SG-1000 port, follow the [cartridge build instructions](README.md#build-and-test) instead.
 
-To build `tetris.nes`:
+The NES build requires GNU Make, a C compiler, Git, Python 3, and Pillow. On Windows use a Unix-like build environment. From the root of this checkout:
 
-	make
+```sh
+git submodule update --init
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install Pillow
+make tetris.nes
+make compare
+```
 
-
-# OS X
-
-In **Terminal**, run:
-	
-	pip install pillow
-	git clone https://github.com/CelestialAmber/TetrisNESDisasm
-	cd TetrisNESDisasm
-	git submodule update --init
-
-	
-To build `tetris.nes`:
-
-	make
-
-# Windows
-
-Download [**Cygwin**](http://cygwin.com/install.html): **setup-x86_64.exe** for 64-bit Windows, **setup-x86.exe** for 32-bit.
-
-Run setup and leave the default settings. At "Select Packages", choose to install the following:
-
-- `make`
-- `git`
-- `gcc-core`
-- `python`
-
-
-
-In the **Cygwin terminal**, enter these commands:
-
-	pip install pillow
-	git clone https://github.com/CelestialAmber/TetrisNESDisasm
-	cd TetrisNESDisasm
-	git submodule update --init
-
-To build `tetris.nes`:
-
-	make
+This builds Tetris (U) [!].nes (`md5: ec58574d96bee8c8927884ae6e7a2508`).

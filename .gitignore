@@ -7,3 +7,8 @@ tetris.lbl
 tetris.dbg
 cTools/scan_includes
 cTools/scan_includes.exe
+
+sg1000/assets.inc
+sg1000/game.map
+
+.venv/

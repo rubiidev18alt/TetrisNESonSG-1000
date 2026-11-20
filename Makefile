@@ -1,3 +1,6 @@
+.DEFAULT_GOAL := sg1000
+# Avoid probing the NES toolchain for a cartridge-only build.
+ifneq ($(filter-out sg1000 tetris.sg test-sg1000 clean-sg1000,$(MAKECMDGOALS)),)
 WINDOWS := $(shell which wine ; echo $$?)
 UNAME_S := $(shell uname -s)
 
@@ -32,10 +35,10 @@ LDFLAGS =
 compare: $(tetris)
 	$(SHA1SUM) -c tetris.sha1
 
-clean:
+clean: clean-sg1000
 	rm -f  $(tetris_obj) $(tetris) *.d tetris.dbg tetris.lbl gfx/*.chr
 	$(MAKE) clean -C tools/cTools/
-	$(MAKE) clean -C cc65/
+	@test ! -f cc65/Makefile || $(MAKE) clean -C cc65/
 
 $(CA65): cc65/src/ca65/*.c
 	$(MAKE) ca65 -C cc65/
@@ -66,3 +69,21 @@ $(tetris_obj): %.o: %.asm $$(dep) $(CA65) $(LD65)
 		$(nesChrEncode) $< $@
 
 
+endif
+
+# Native SG-1000 cartridge (independent of cc65 and the NES tools).
+.PHONY: sg1000 test-sg1000 clean-sg1000
+.DELETE_ON_ERROR:
+sg1000: tetris.sg
+
+sg1000/assets.inc: sg1000/assets.py main.asm constants.asm $(wildcard audio/music/music[123].asm) gfx/game_tileset.png gfx/title_menu_tileset.png gfx/nametables/title_screen_nametable.asm
+	python3 $< $@
+
+tetris.sg: sg1000/game.asm sg1000/video.asm sg1000/audio.asm sg1000/assets.inc
+	pyz80 --obj=$@ --mapfile=sg1000/game.map $<
+
+test-sg1000: tetris.sg
+	python3 -m unittest discover -s sg1000 -p 'test_*.py'
+
+clean-sg1000:
+	rm -f tetris.sg sg1000/assets.inc sg1000/game.map
