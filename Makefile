@@ -76,10 +76,10 @@ endif
 .DELETE_ON_ERROR:
 sg1000: tetris.sg
 
-sg1000/assets.inc: sg1000/assets.py main.asm constants.asm $(wildcard audio/music/music[123].asm) gfx/game_tileset.png gfx/title_menu_tileset.png gfx/nametables/title_screen_nametable.asm
+sg1000/assets.inc: sg1000/assets.py sg1000/scenes.py main.asm constants.asm data/demo_data.asm $(wildcard audio/music/*.asm gfx/*.png gfx/nametables/*)
 	python3 $< $@
 
-tetris.sg: sg1000/game.asm sg1000/video.asm sg1000/audio.asm sg1000/assets.inc
+tetris.sg: sg1000/game.asm sg1000/flow.asm sg1000/video.asm sg1000/audio.asm sg1000/assets.inc
 	pyz80 --obj=$@ --mapfile=sg1000/game.map $<
 
 test-sg1000: tetris.sg

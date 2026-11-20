@@ -1,4 +1,4 @@
-; SG-1000: 0000-3fff fixed ROM, c000-c3ff work RAM. No BIOS or mapper.
+; SG-1000: 0000-bfff fixed ROM, c000-c3ff work RAM. No BIOS or mapper.
 board:      equ 0xc000   ; 22 rows x 10, first two above the visible well
 cells:      equ 0xc0dc   ; four checked offsets into board (fits in a byte)
 piece:      equ 0xc0e0
@@ -27,8 +27,35 @@ sfxTime:    equ 0xc0fa
 
 stats:      equ 0xc100   ; seven 16-bit spawn counters, T J Z O S L I
 wipeRows:   equ 0xc10e   ; up to four name-table row addresses
-best:       equ 0xc120   ; two session records in packed BCD
-voices:     equ 0xc116   ; three records: event pointer (2), frames remaining (1)
+voices:     equ 0xc116   ; four records: event pointer (2), frames remaining, envelope pointer (2)
+
+clock:      equ 0xc130
+trackId:    equ 0xc131
+demo:       equ 0xc132
+demoPtr:    equ 0xc133
+demoCount:  equ 0xc135
+demoIndex:  equ 0xc136
+savedOpts:  equ 0xc137
+rankPtr:    equ 0xc13b
+letter:     equ 0xc13d
+anchorX:    equ 0xc13e
+anchorY:    equ 0xc13f
+animTime:   equ 0xc140
+actorId:    equ 0xc141
+actorCount: equ 0xc142
+allegro:    equ 0xc143
+tempoBase:  equ 0xc144
+fxPtr:      equ 0xc145
+fxNote:     equ 0xc147
+bonusL:     equ 0xc18c
+bonusH:     equ 0xc18d
+castSize:   equ 0xc149
+previewOff: equ 0xc148
+creatureFrame: equ 0xc14a
+launchWait: equ 0xc14b
+rocketY:    equ 0xc14c
+leadPeriod: equ 0xc14d
+ranks:      equ 0xc150   ; six entries of score (BCD LE), level, six ASCII letters
 
  org 0
  di
@@ -49,75 +76,27 @@ boot:
  ld (seed),hl
  call mute
  call videoInit
-menu:
- call mute
- ld hl,menuMap
- call screen
-menuLoop:
- call menuNumbers
- call frame
- ld a,(pressed)
- bit 4,a
- jp nz,newGame
- ld hl,cursor
- ld c,4
- bit 0,a
- call nz,cycleDown
- ld a,(pressed)
- bit 1,a
- call nz,cycleUp
- ld a,(cursor)
- add a,a
- add a,a
- ld hl,options
- call indexA
- ld e,(hl)
- inc hl
- ld d,(hl)
- inc hl
- ld c,(hl)
- ex de,hl
- ld a,(pressed)
- bit 2,a
- call nz,cycleDown
- ld a,(pressed)
- bit 3,a
- call nz,cycleUp
- jr menuLoop
-options:
- dw modeB
- db 2,0
- dw startLevel
- db 20,0
- dw heightB
- db 6,0
- dw music
- db 4,0
-cycleDown:
- ld a,(hl)
- or a
- jr nz,cycleDec
- ld (hl),c
-cycleDec:
- dec (hl)
- ret
-cycleUp:
- inc (hl)
- ld a,(hl)
- cp c
- ret c
- ld (hl),0
- ret
+ ld hl,rankDefaults
+ ld de,ranks
+ ld bc,60
+ ldir
+ jp intro
 
 ; Poll the latched TMS9918A frame flag (register 1 interrupts disabled).
 frame:
  in a,(0xbf)
  and 0x80
  jr z,frame
+ ld hl,clock
+ inc (hl)
  in a,(0xdc)
  cpl
  and 63
  ld b,a
+ ld a,(demo)
+ or a
+ call nz,demoPad
+
  ld a,(held)
  cpl
  and b
@@ -152,6 +131,10 @@ newGame:
  ld (lines),hl
  ld (score),hl
  ld (score+2),a
+ ld (allegro),a
+ ld (bonusL),a
+ ld (bonusH),a
+ ld (previewOff),a
  ld (das),a
  ld (spawnCount),a
  ld (sfxTime),a
@@ -175,10 +158,9 @@ firstThreshold:
  ld a,(modeB)
  or a
  call nz,garbage
- ld hl,gameMap
- call screen
+ call gameScreen
  call musicInit
- ld a,255
+ xor a
  ld (nextPiece),a
  call choose
 spawn:
@@ -217,8 +199,24 @@ playFrame:
  ld a,(pressed)
  bit 0,a
  jp nz,pauseGame
+ ; Both fire buttons together substitute for NES Select (preview toggle).
+ ld a,(held)
+ and 48
+ cp 48
+ jr nz,normalControls
+ ld a,(pressed)
+ and 48
+ jr z,normalControls
+ ld hl,previewOff
+ ld a,(hl)
+ xor 1
+ ld (hl),a
+ call drawPreview
+ jr gravityControl
+normalControls:
  call shift
  call rotate
+gravityControl:
  ld a,(level)
  cp 29
  jr c,lookupGravity
@@ -283,8 +281,10 @@ lock:
 noDropScore:
  call drawBoard
  call clearRows
+ call effect
  call wipe
  call award
+ call danger
  call drawBoard
  call hud
  ld a,(modeB)
@@ -302,9 +302,6 @@ entryDelay:
  ld a,20
  sub b
  ld b,a
- push bc
- call effect
- pop bc
 entryLoop:
  push bc
  call frame
@@ -346,10 +343,10 @@ tryShift:
  push bc
  call valid
  pop bc
- ret nc
+ jp nc,shiftSound
  ld hl,posX
  ld (hl),b
- ld a,16-1
+ ld a,16
  ld (das),a
  ret
 rotate:
@@ -372,7 +369,7 @@ turnLeft:
  call valid
  jr c,undoTurn
  pop af
- ret
+ jp rotateSound
 undoTurn:
  pop af
  ld (piece),a
@@ -441,6 +438,9 @@ indexA:
  ret
 
 choose:
+ ld a,(demo)
+ or a
+ jp nz,demoChoose
  ld hl,spawnCount
  inc (hl)
  ld a,(seed+1)
@@ -545,7 +545,7 @@ scanCell:
  add hl,hl
  add hl,hl
  push de
- ld de,0x1800+11
+ ld de,0x1800+32+12
  add hl,de
  push hl
  ld a,(cleared)
@@ -593,6 +593,14 @@ wipe:
  ret z
  ld c,0
 wipeStep:
+ push bc
+wipeSync:
+ call frame
+ call audioTick
+ ld a,(clock)
+ and 3
+ jr nz,wipeSync
+ pop bc
  ld hl,wipeRows
  ld a,(cleared)
  ld b,a
@@ -619,15 +627,6 @@ wipeRow:
  out (0xbe),a
  pop hl
  djnz wipeRow
- push bc
- ld b,4
-wipeWait:
- push bc
- call frame
- call audioTick
- pop bc
- djnz wipeWait
- pop bc
  inc c
  ld a,c
  cp 5
@@ -662,6 +661,10 @@ advance:
  add a,10
  ld hl,level
  inc (hl)
+ push af
+ ld hl,fxLevel
+ call startFx
+ pop af
 setThreshold:
  ld (toLevel),a
 linePoints:
@@ -704,6 +707,7 @@ points:
  dw 0,0x0040,0x0100,0x0300,0x1200
 
 pauseGame:
+ call hideWell
  call mute
  ld hl,pauseMsg
  call banner
@@ -712,42 +716,21 @@ pauseLoop:
  ld a,(pressed)
  bit 0,a
  jr z,pauseLoop
- jp play
-lost:
- call drawBoard
- ld hl,lostMsg
- jr finish
-won:
- ld a,(level)
- cp 10
- jr c,winBonus
- sub 10
-winBonus:
- ld hl,heightB
- add a,(hl)
- ld b,a
- ld de,0x1000
- or a
- call nz,scoreAdd
+ call gameScreen
  call hud
- ld hl,wonMsg
-finish:
- call banner
- call mute
- ld hl,0x1800+32*23+10
- call setAddr
- ld hl,retryMsg
- ld bc,13
- call transfer
-finishLoop:
- call frame
- ld a,(pressed)
- bit 4,a
- jr z,finishLoop
- jp menu
+ jp play
+gameScreen:
+ ld hl,scenePlay
+ call screen
+ ld a,(modeB)
+ or a
+ ld hl,game_typeb_nametable_patch
+ call nz,patchScene
+ ret
+ include "flow.asm"
 banner:
  push hl
- ld hl,0x1800+32*11+11
+ ld hl,0x1800+32*11+12
  call setAddr
  pop hl
  ld bc,10
@@ -758,11 +741,10 @@ lostMsg:
  dm "GAME  OVER"
 wonMsg:
  dm " COMPLETE "
-retryMsg:
- dm "BUTTON 1 MENU"
 
  include "video.asm"
  include "audio.asm"
  include "assets.inc"
- ds 16383-$
+romUsed:
+ ds 49151-$
  db 0xff
