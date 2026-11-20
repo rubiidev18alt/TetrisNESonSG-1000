@@ -108,14 +108,12 @@ class Cartridge(unittest.TestCase):
         for _ in range(31):
             self.step()
         self.assertEqual(self.value("posY"), 3)
-        self.step(1)
-        self.assertEqual(self.text(11, 12, 10), b"  PAUSED  ")
-        for _ in range(49):
-            self.step()
-        self.assertEqual(self.value("posY"), 3)
-        self.step(1)
-        self.assertNotEqual(self.text(11, 12, 10), b"  PAUSED  ")
-        self.assertIn(0xD9, self.psg)
+        for _ in range(48):
+            self.step(1)  # Up no longer interrupts play or gravity
+        self.assertEqual(self.value("posY"), 4)
+        self.assertEqual(self.text(1, 19, 3), b"000")
+        self.assertEqual(self.text(3, 24, 6), b"010000")
+        self.assertIn(0xDA, self.psg)
 
     def test_rotation_collision(self):
         self.start()
@@ -175,7 +173,7 @@ class Cartridge(unittest.TestCase):
         self.assertEqual(self.text(11, 12, 10), b" COMPLETE ")
         for _ in range(165):
             self.step()
-        self.assertEqual(self.text(6, 14, 6), b"001040")
+        self.assertEqual(self.text(7, 14, 6), b"001040")
         self.assertEqual(self.value("trackId"), 7)
         self.tap(16)
         self.assertEqual(self.value("trackId"), 6)  # name entry; second place
@@ -201,9 +199,28 @@ class Cartridge(unittest.TestCase):
                 if choice == 3:
                     self.assertEqual(self.psg, [])
                 else:
-                    self.assertIn(0xD9, self.psg)
+                    self.assertIn(0xDA, self.psg)
                     self.assertTrue(any(0x90 <= x < 0x9F for x in self.psg))
                     self.assertTrue(any(0xB0 <= x < 0xBF for x in self.psg))
+
+    def test_drum_hits_decay_between_beats(self):
+        self.start()
+        volume = 15
+        run = hits = 0
+        for _ in range(600):
+            self.psg.clear()
+            self.step()
+            for cmd in self.psg:
+                if cmd >= 0xF0:
+                    volume = cmd & 15
+            if volume == 15:
+                run = 0
+            else:
+                hits += run == 0
+                run += 1
+                self.assertGreaterEqual(volume, 11)
+                self.assertLessEqual(run, 2)
+        self.assertGreater(hits, 5)
 
     def test_high_start(self):
         self.types()
@@ -284,7 +301,7 @@ class Cartridge(unittest.TestCase):
         self.assertEqual(self.value("trackId"), 7)
         self.assertEqual(self.value("castSize"), 8)
         self.assertGreater(self.value("actorCount"), 0)
-        self.assertEqual(self.text(6, 14, 6), b"014400")
+        self.assertEqual(self.text(7, 14, 6), b"014400")
         self.setUp()
         self.start()
         self.put("score", [0, 0, 0x12])

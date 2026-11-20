@@ -1,5 +1,6 @@
 """Translate the NTSC disassembly tables into Z80 data and Graphics II tiles."""
 
+import math
 import re
 import sys
 from contextlib import redirect_stdout
@@ -96,6 +97,24 @@ def make_art():
     scenes.actors(ROOT, main, table, emit)
 
 
+def tone_divider(nes_timer, song, channel):
+    # At NTSC clocks the PSG divider equals the NES pulse timer + 1.
+    # The triangle normally sounds one octave lower. For bass parts that
+    # cross the PSG's low limit, lift the part as a whole to keep intervals.
+    divider = nes_timer + 1
+    if channel == 2 and song not in (1, 2, 4, 6):
+        divider *= 2
+    # Occasional out-of-range pulse notes: use their octave, not a flat drone.
+    while divider > 1023:
+        divider = (divider + 1) // 2
+    return divider
+
+
+def attenuation(volume):
+    # NES envelope nibbles are linear amplitude; PSG steps are 2 dB.
+    return 15 if not volume else min(14, 3 + round(10 * math.log10(15 / volume)))
+
+
 def make_music(song, channel, name):
     # Predecode the pulse voice to duration, PSG latch, period high.
     extra = {
@@ -127,6 +146,7 @@ def make_music(song, channel, name):
         noise = table("noises_table")
         order = [1, 1, 1, 2] if song == 7 else [1]
     instrument = 4 if (song, channel) == (3, 1) else 0
+    control = 0
     loop = 0
     for n in order:
         if song == 3 and channel == 0 and n == 2:
@@ -139,7 +159,8 @@ def make_music(song, channel, name):
             op = script[i]
             i += 1
             if op == 0x9F:
-                instrument = script[i] & 31
+                control = script[i]
+                instrument = control & 31
                 i += 2
             elif op == 255:
                 if count:
@@ -153,18 +174,28 @@ def make_music(song, channel, name):
                 # The NES table addresses short percussion hits, not pitches.
                 ix = op & 63
                 pitch = noise[ix + 1] & 15
-                out.extend(
-                    [duration, 0xE4 + min(2, pitch // 3), 0xFF if op == 1 else 0xF7]
-                )
+                # One-byte drum events: 0 = rest, otherwise noise clock latch.
+                # Decay is independent of the (often much longer) beat length.
+                out.extend([duration, 0 if op == 1 else 0xE4 + min(2, pitch // 3)])
             else:
-                period = min(1023, periods[op // 2 + transpose] + 1) if op != 2 else 0
-                if channel == 2:  # NES triangle runs one octave below a pulse
-                    period = min(1023, period * 2)
+                period = (
+                    tone_divider(periods[op // 2 + transpose], song, channel)
+                    if op != 2
+                    else 0
+                )
+                gate = 0
+                if channel == 2:
+                    # Encode the linear-counter behaviors used by these scores.
+                    if control & 31:
+                        assert (control & 31) in (15, 16)
+                        gate = 0x80
+                    elif (control & 0xC0) in (0x40, 0x80):
+                        gate = 0x40
                 out.extend(
                     [
                         duration,
                         (channel << 5) | (0x9F if op == 2 else 0x80 | (period & 15)),
-                        period >> 4,
+                        (period >> 4) | gate,
                     ]
                 )
                 if channel < 2:
@@ -212,8 +243,6 @@ if __name__ == "__main__":
                 for v in table("demoTetriminoTypeTable", demo)
             ],
         )
-        pitch = [n for pair in table("noiselo_table") for n in (pair >> 4, pair & 15)]
-        emit("curtainNoise", [0xE4 + min(2, pitch[i] // 5) for i in range(0, 60, 3)])
         emit("creatureSteps", table("ending_typeBCathedralVectorTable")[:9])
         emit("creatureLanes", table("ending_typeBCathedralYTable")[:54])
         emit("durations", table("noteDurationTable"))
@@ -227,10 +256,11 @@ if __name__ == "__main__":
             frames = []
             for pair in table(name, inline):
                 if pair in (240, 255):
-                    if pair == 240:
-                        frames.append(15)
+                    # $ff returns to the instrument's constant volume.
+                    sustain = 3 if name == names[3] else 1
+                    frames.append(15 if pair == 240 else attenuation(sustain))
                     break
-                frames += [15 - (pair >> 4), 15 - (pair & 15)]
+                frames += [attenuation(pair >> 4), attenuation(pair & 15)]
             emit(name, frames + [255])
         for song in (1, 2, 3, 4, 5, 6, 7):
             for channel in range(3 if song == 3 else 4):

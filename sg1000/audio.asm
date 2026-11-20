@@ -36,6 +36,8 @@ startTrack:
  xor a
  ld (sfxTime),a
  ld (leadPeriod),a
+ ld a,0x9f
+ ld (leadVolume),a
  ld hl,0
  ld (fxPtr),hl
  pop af
@@ -72,6 +74,8 @@ initVoice:
  ld a,1
  ld (de),a
  inc de
+ xor a
+ ld (de),a
  inc de
  inc de
  djnz initVoice
@@ -119,13 +123,8 @@ fxTick:
  ld (sfxTime),a
  inc hl
  ld a,(hl)
- ld (fxNote),a
  inc hl
  ld (fxPtr),hl
-fxHold:
- ld hl,sfxTime
- dec (hl)
- ld a,(fxNote)
  ld b,a
  and 15
  or 0x80
@@ -137,8 +136,11 @@ fxHold:
  rrca
  and 15
  out (0x7f),a
- ld a,0x95
+ ld a,0x99
  out (0x7f),a
+fxHold:
+ ld hl,sfxTime
+ dec (hl)
  ret
 fxEnd:
  ld hl,0
@@ -150,6 +152,8 @@ fxEnd:
  bit 4,a
  ret nz
  ld a,(leadPeriod+1)
+ out (0x7f),a
+ ld a,(leadVolume)
  out (0x7f),a
  ret
 fxSilence:
@@ -163,7 +167,7 @@ voiceTick:
  or h
  ret z
  dec (ix+2)
- jr nz,envelopeTick
+ jp nz,envelopeTick
  ld a,(hl)
  or a
  jr nz,playNote
@@ -179,6 +183,14 @@ voiceTick:
  ld (ix+1),a
  ld a,c
  or 15
+ cp 0x9f
+ jr nz,writeEnd
+ ld (leadPeriod),a
+ ld a,(fxPtr+1)
+ or a
+ ret nz
+ ld a,0x9f
+writeEnd:
  out (0x7f),a
  ret
 loopNote:
@@ -195,6 +207,8 @@ playNote:
  pop hl
  inc hl
  ld a,c
+ cp 0xf0
+ jp z,drumHit
  cp 0x90
  jr nz,sendLatch
  ld a,(hl)
@@ -203,6 +217,11 @@ playNote:
  ld a,(hl)
  ld (leadPeriod+1),a
  dec hl
+ ld a,(fxPtr+1)
+ or a
+ jr z,sendLatch
+ inc hl
+ jr noteRest
 sendLatch:
  ld a,(hl)
  inc hl
@@ -210,12 +229,31 @@ sendLatch:
  bit 4,a
  jr nz,noteRest
  ld a,(hl)
+ and 63
  out (0x7f),a
  ld a,c
  cp 0xd0
  jr nz,noteRest
- ld a,0xd9
+ ld a,0xda
  out (0x7f),a
+ ; Upper two event bits describe the NES triangle linear-counter mode.
+ ld a,(hl)
+ and 0xc0
+ jr z,bassDuration
+ rlca
+ rlca
+ cp 1
+ ld a,0          ; sustain until next note
+ jr z,bassGate
+ ld a,5          ; four frames for the $0f quarter-frame counter
+ jr bassGate
+bassDuration:
+ ld a,(ix+2)     ; open for duration - 1 frames, capped at 15
+ cp 17
+ jr c,bassGate
+ ld a,16
+bassGate:
+ ld (ix+3),a
 noteRest:
  inc hl
  ld a,c
@@ -239,18 +277,59 @@ saveEvent:
 envelopeTick:
  ld a,c
  cp 0xd0
- ret nc
+ jr nc,gateTick
  ld l,(ix+3)
  ld h,(ix+4)
  ld a,(hl)
  cp 255
  ret z
- or c
- out (0x7f),a
  inc hl
  ld (ix+3),l
  ld (ix+4),h
+ or c
+ bit 5,c
+ jr nz,writeVolume
+ ld (leadVolume),a
+ ld a,(fxPtr+1)
+ or a
+ ret nz
+ ld a,(leadVolume)
+writeVolume:
+ out (0x7f),a
  ret
+drumHit:
+ ld a,(hl)
+ inc hl
+ ld (ix+3),0
+ or a
+ ld a,0xff
+ jr z,drumVolume
+ dec hl
+ ld a,(hl)
+ inc hl
+ out (0x7f),a
+ ld a,0xfb        ; a quiet two-frame attack, never hiss until next note
+ ld (ix+3),3
+drumVolume:
+ out (0x7f),a
+ jr saveEvent
+gateTick:
+ ld a,(ix+3)
+ or a
+ ret z
+ dec (ix+3)
+ jr z,gateOff
+ cp 2
+ ret nz
+ ld a,c
+ cp 0xf0
+ ret nz
+ ld a,0xfd
+ jr writeVolume
+gateOff:
+ ld a,c
+ or 15
+ jr writeVolume
 shiftSound:
  ld hl,fxShift
  jr startFx

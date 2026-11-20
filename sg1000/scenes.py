@@ -136,10 +136,30 @@ def pixel(nt, img, pal, x, y):
     return pal[4 * attr + ink] if ink else pal[0]
 
 
-def local_id(tiles, x, y, scaled, nt, img, pal):
+def source_row(scene, x, y):
+    """Fit the NES header and rows 2..26 into 24 tiles, removing a spacer.
+
+    The well cannot be scaled: keep its 20 rows intact. Its top frame shares
+    a tile with the bottom of the LINES box. The side panels lose blank row 6.
+    """
+    if scene == "Play" and 11 <= x <= 22 or scene in ("Level", "Name"):
+        skip = 5
+    elif scene in ("Type", "Play"):
+        skip = 6
+    else:  # ending score panel; keep the lower animation at its original Y
+        skip = 11
+    return y + 2 + (y + 2 >= skip)
+
+
+def local_id(tiles, x, y, scene, nt, img, pal):
     lines = []
     for j in range(8):
-        sy = (8 * y + j) * 5 // 4 if scaled else 8 * y + j + 24
+        if scene in ("Title", "Legal"):
+            sy = (8 * y + j) * 5 // 4
+        elif scene == "Play" and 11 <= x <= 22 and y == 2:
+            sy = 4 * 8 + j * 2  # two borders, four scanlines apiece
+        else:
+            sy = source_row(scene, x, y) * 8 + j
         lines.append(
             encode_line(tuple(pixel(nt, img, pal, 8 * x + i, sy) for i in range(8)))
         )
@@ -194,19 +214,20 @@ def generate(root, table, emit):
                 if tile == 253:
                     break
             changes.append(edits)
-        scaled = label in ("Title", "Legal")
+        patch_slots = {}
         blocks = []
         names = []
         for bank in range(3):
             tiles = {}
             for y in range(8 * bank, 8 * bank + 8):
                 for x in range(32):
-                    names.append(local_id(tiles, x, y, scaled, nt, img, pal))
-                    slot = (y + 3) * 32 + x
+                    names.append(local_id(tiles, x, y, label, nt, img, pal))
+                    slot = source_row(label, x, y) * 32 + x
                     for edits in changes:
                         if slot in edits:
+                            patch_slots[slot] = y * 32 + x
                             old, nt[slot] = nt[slot], edits[slot]
-                            edits[slot] = local_id(tiles, x, y, scaled, nt, img, pal)
+                            edits[slot] = local_id(tiles, x, y, label, nt, img, pal)
                             nt[slot] = old
             assert len(tiles) <= 160, (label, bank, len(tiles))
             for plane in range(2):
@@ -225,10 +246,10 @@ def generate(root, table, emit):
         for name, edits in zip(patches, changes):
             print(name + ":")
             # Compact (VRAM addr, tile) triples; all patch entries fit in a byte count.
-            edits = [(k, v) for k, v in edits.items() if 96 <= k < 864]
+            edits = [(k, v) for k, v in edits.items() if k in patch_slots]
             emit(None, [len(edits)])
             for addr, tile in edits:
-                print(f" dw {0x1800 + addr - 96}\n db {tile}")
+                print(f" dw {0x1800 + patch_slots[addr]}\n db {tile}")
 
 
 def actors(root, main, table, emit):

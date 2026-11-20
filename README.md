@@ -12,18 +12,17 @@ Press **1** to advance from the title. On the game-type screen, **Left/Right** s
 | Soft drop | Hold Down; press again for each new piece |
 | Rotate clockwise / counterclockwise | 1 / 2 |
 | Hide or show next piece | 1 + 2 together |
-| Pause / resume | Up |
 | Continue after a game or ending | 1 (after any bonus tally) |
 
-Each game type has a three-place high-score table, retained until reset. For a qualifying score, **Up/Down** cycles characters, **Left/Right** moves through the six-letter name, **1** advances, and **2** finishes.
+Up is ignored during play. Each game type has a three-place high-score table, retained until reset. For a qualifying score, **Up/Down** cycles characters, **Left/Right** moves through the six-letter name, **1** advances, and **2** finishes.
 
 ### What's in the cartridge
 
-The Z80 reads all three 16 KiB ROM windows directly (`$0000–$BFFF`); work RAM starts at `$C000`. The assembler's `romUsed` label marks the end of the program and assets before final cartridge-size padding. The build uses over 99% of the image before that padding.
+The Z80 reads all three 16 KiB ROM windows directly (`$0000–$BFFF`); work RAM starts at `$C000`. The assembler's `romUsed` label marks the end of the program and assets before final cartridge-size padding. The build uses about 98% of the image before that padding.
 
-* **Graphics:** Nine scenes converted from the NES nametables, tile sheets, attribute quadrants and palettes into TMS9918A Graphics II. They cover the legal notice, title, both selection screens, playfield, name entry, and three ending backgrounds. The game uses the NES level skins, statistics panel and next box; pausing hides the field, line clears wipe outward on the four-frame clock, and top-out lowers the curtain.
+* **Graphics:** Nine scenes converted from the NES nametables, tile sheets, attribute quadrants and palettes into TMS9918A Graphics II. They cover the legal notice, title, both selection screens, playfield, name entry, and three ending backgrounds. The game uses the NES level skins, statistics panel and next box; the headers fit above the full 20-row well, line clears wipe outward on the four-frame clock, and top-out lowers the curtain.
 * **Play:** The disassembly supplies all 19 orientations, rotation and spawn tables, NTSC gravity curve, and the attract-mode piece and input streams. The game implements NES-style delayed auto-shift, failed-drop lock, soft-drop points, level transitions, and B-Type garbage and bonus scoring.
-* **Music:** Seven NES arrangements use the PSG's three tones and noise channel, with converted pulse envelopes, percussion, and the faster tempo when the stack reaches the danger row. Move, rotate, lock, line-clear and level-up cues temporarily use the lead channel.
+* **Music:** Seven NES arrangements use the PSG's three tones and noise channel, with pulse envelopes mapped to PSG volume steps, octave-adjusted bass, short percussion hits, and the faster tempo when the stack reaches the danger row. Move, rotate, lock, line-clear and level-up cues temporarily use the lead channel.
 * **Endings:** A-Type scores of 30,000 and up launch different rockets at the NES score thresholds. B-Type pays out the level and height bonuses in hundreds; level and height determine the procession, or the concert at level 9/19. The actors use animation frames converted from the NES metasprites.
 
 This is a native adaptation, not a cycle-exact emulator. The SG-1000 has 192 visible scanlines, two colours per eight-pixel pattern row, single-colour sprites, and no NES APU. Screen framing, colours, sprite priority, sound timbres and some animation and input timing consequently differ from the NES.

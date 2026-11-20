@@ -27,7 +27,7 @@ sfxTime:    equ 0xc0fa
 
 stats:      equ 0xc100   ; seven 16-bit spawn counters, T J Z O S L I
 wipeRows:   equ 0xc10e   ; up to four name-table row addresses
-voices:     equ 0xc116   ; four records: event pointer (2), frames remaining, envelope pointer (2)
+voices:     equ 0xc116   ; four records: event pointer (2), frames remaining, envelope pointer or gate timer (2)
 
 clock:      equ 0xc130
 trackId:    equ 0xc131
@@ -46,7 +46,6 @@ actorCount: equ 0xc142
 allegro:    equ 0xc143
 tempoBase:  equ 0xc144
 fxPtr:      equ 0xc145
-fxNote:     equ 0xc147
 bonusL:     equ 0xc18c
 bonusH:     equ 0xc18d
 castSize:   equ 0xc149
@@ -54,6 +53,7 @@ previewOff: equ 0xc148
 creatureFrame: equ 0xc14a
 launchWait: equ 0xc14b
 rocketY:    equ 0xc14c
+leadVolume: equ 0xc14f
 leadPeriod: equ 0xc14d
 ranks:      equ 0xc150   ; six entries of score (BCD LE), level, six ASCII letters
 
@@ -196,9 +196,6 @@ play:
 playFrame:
  call frame
  call audioTick
- ld a,(pressed)
- bit 0,a
- jp nz,pauseGame
  ; Both fire buttons together substitute for NES Select (preview toggle).
  ld a,(held)
  and 48
@@ -227,7 +224,7 @@ lookupGravity:
  ld b,(hl)
  ; NES down must be pressed afresh after entry; repeat every two frames.
  ld a,(held)
- and 15
+ and 14
  cp 2
  jr nz,releaseDown
  ld hl,downRepeat
@@ -706,19 +703,6 @@ maxScore:
 points:
  dw 0,0x0040,0x0100,0x0300,0x1200
 
-pauseGame:
- call hideWell
- call mute
- ld hl,pauseMsg
- call banner
-pauseLoop:
- call frame
- ld a,(pressed)
- bit 0,a
- jr z,pauseLoop
- call gameScreen
- call hud
- jp play
 gameScreen:
  ld hl,scenePlay
  call screen
@@ -735,8 +719,6 @@ banner:
  pop hl
  ld bc,10
  jp transfer
-pauseMsg:
- dm "  PAUSED  "
 lostMsg:
  dm "GAME  OVER"
 wonMsg:

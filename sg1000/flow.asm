@@ -256,7 +256,7 @@ satEnd:
  out (0xbe),a
  ret
 typeLabel:
- ld hl,0x1800+13
+ ld hl,0x1800+32+13
  call setAddr
  ld a,(modeB)
  add a,65
@@ -334,12 +334,6 @@ demoLeave:
  ld (demo),a
  jp title
 
-hideWell:
- ld hl,0x1800
- call setAddr
- ld bc,768
- xor a
- jp fillVram
 rectangle:
  ; Tile rectangle: HL=name address, B=rows, C=columns, A=tile.
  push af
@@ -365,16 +359,6 @@ lost:
  ld hl,0x1800+3*32+12
  ld b,20
 curtainRow:
- ld a,20
- sub b
- push hl
- ld hl,curtainNoise
- call indexA
- ld a,(hl)
- out (0x7f),a
- ld a,0xf8
- out (0x7f),a
- pop hl
  push bc
  push hl
  ld bc,0x010a
@@ -455,7 +439,7 @@ concertPatch:
  pop hl
  jr concertPatch
 endingPoints:
- ld hl,0x1800+1*32+14
+ ld hl,0x1800+2*32+14
  call setAddr
  ld hl,score+2
  call printScore
@@ -493,15 +477,15 @@ payHundred:
  ld b,1
  call scoreAdd
 tallyDisplay:
- ld hl,0x1800+2*32+15
+ ld hl,0x1800+3*32+15
  call setAddr
  ld a,(bonusL)
  call hundreds
- ld hl,0x1800+3*32+15
+ ld hl,0x1800+4*32+15
  call setAddr
  ld a,(bonusH)
  call hundreds
- ld hl,0x1800+6*32+14
+ ld hl,0x1800+7*32+14
  call setAddr
  ld hl,score+2
  jp printScore
@@ -522,7 +506,7 @@ rocketEnding:
  cp 0x12
  ld hl,ending_patchToPpu_typeAOver120k
  call nc,patchScene
- ld hl,0x1800+32+14
+ ld hl,0x1800+2*32+14
  call setAddr
  ld hl,score+2
  call printScore

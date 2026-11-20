@@ -151,7 +151,7 @@ drawTile:
  ret
 
 hud:
- ld hl,0x1800+32*2+24
+ ld hl,0x1800+32*3+24
  call setAddr
  call rankBase
  inc hl
@@ -235,7 +235,7 @@ statsLoop:
 statsNext:
  pop bc
  djnz statsLoop
- ld hl,0x1800+32*1+3
+ ld hl,0x1800+32*2+3
  call setAddr
  ld a,(modeB)
  add a,65
@@ -262,7 +262,7 @@ scorePair:
  djnz scorePair
  ret
 hudLines:
- ld hl,0x1800+32*0+19
+ ld hl,0x1800+32*1+19
  call setAddr
  ld hl,(lines)
  call number3
