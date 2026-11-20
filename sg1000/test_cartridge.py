@@ -93,6 +93,10 @@ class Cartridge(unittest.TestCase):
         start = 0x1800 + row * 32 + col
         return self.vram[start : start + width]
 
+    def test_boot_notice(self):
+        self.assertIn(b"THIS IS AN UNOFFICIAL PORT", self.text(20, 0, 32))
+        self.assertIn(b"NOT AN OFFICIAL TETRIS PRODUCT", self.text(22, 0, 32))
+
     def test_boot_controls_and_gravity(self):
         self.assertEqual(len(ROM), 49152)
         self.assertEqual(self.regs[1], 0xC0)
@@ -152,6 +156,30 @@ class Cartridge(unittest.TestCase):
                 self.assertEqual(self.value("lines"), n)
                 self.assertEqual(self.text(5, 24, 6), f"{points:06}".encode())
                 self.assertEqual(self.cpu.memory[RAM["board"] + 170 + n * 10], 8)
+
+    def test_wipe_targets_only_completed_visible_rows(self):
+        # Lock at the floor with a gap filled by the I. Also exercise a
+        # nonadjacent full row, the first visible row, and a hidden row.
+        self.start()
+        board = bytearray(220)
+        for row in (1, 2, 12, 21):
+            board[row * 10 : row * 10 + 10] = bytes([8] * 10)
+        board[215] = 0
+        self.put("board", board)
+        self.put("piece", [17, 5, 20])
+        self.put("fall", [47])
+        self.step()  # locked tiles on screen; wipe is waiting for VBlank
+        expected = self.text(0, 0, 768)
+        self.put("clock", [3])
+        for phase in range(4):  # final phase reveals the compacted board
+            for row in (3, 13, 22):
+                for col in (16 - phase, 17 + phase):
+                    index = 32 * row + col
+                    self.assertNotEqual(expected[index], 0)
+                    expected[index] = 0
+            for _ in range(1 if phase == 0 else 4):
+                self.step()
+            self.assertEqual(self.text(0, 0, 768), expected)
 
     def test_level_transition(self):
         self.start()

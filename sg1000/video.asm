@@ -132,7 +132,7 @@ drawActive:
  jp paintCells
 drawBoard:
  ld de,board+20
- ld hl,0x1800+32*3+12
+ ld hl,wellAddr
  ld c,20
 drawRow:
  call setAddr

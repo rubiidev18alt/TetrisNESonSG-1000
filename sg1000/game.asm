@@ -1,5 +1,6 @@
 ; SG-1000: 0000-bfff fixed ROM, c000-c3ff work RAM. No BIOS or mapper.
 board:      equ 0xc000   ; 22 rows x 10, first two above the visible well
+wellAddr:   equ 0x1800+32*3+12 ; first visible tile (RAM board row 2)
 cells:      equ 0xc0dc   ; four checked offsets into board (fits in a byte)
 piece:      equ 0xc0e0
 posX:       equ 0xc0e1
@@ -529,21 +530,23 @@ scanCell:
  dec hl
  dec c
  jr nz,scanCell
- ; B is the number of rows left. Translate RAM row 0..21 to
- ; the identically numbered name-table row (visible rows begin at 2).
+ ; Scanning upwards: B=22 at the floor (RAM row 21), B=3 at
+ ; the first visible row. Hidden rows compact too, but have no VRAM tile.
  push hl
- ld a,22
- sub b
- ld l,a
- ld h,0
- add hl,hl
- add hl,hl
- add hl,hl
- add hl,hl
- add hl,hl
  push de
- ld de,0x1800+32+12
+ ld hl,0
+ ld a,b
+ sub 3
+ jr c,saveWipeRow
+ ld l,a
+ add hl,hl
+ add hl,hl
+ add hl,hl
+ add hl,hl
+ add hl,hl
+ ld de,wellAddr
  add hl,de
+saveWipeRow:
  push hl
  ld a,(cleared)
  add a,a
@@ -606,6 +609,9 @@ wipeRow:
  inc hl
  ld d,(hl)
  inc hl
+ ld a,d
+ or a
+ jr z,wipeNextRow
  push hl
  ld a,4
  sub c
@@ -623,6 +629,7 @@ wipeRow:
  xor a
  out (0xbe),a
  pop hl
+wipeNextRow:
  djnz wipeRow
  inc c
  ld a,c

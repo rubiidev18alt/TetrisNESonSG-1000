@@ -3,7 +3,7 @@
 intro:
  ld hl,sceneLegal
  call screen
- ld b,120
+ ld b,240
 legalWait:
  push bc
  call frame
@@ -356,7 +356,7 @@ lost:
  or a
  jp nz,demoLeave
  call mute
- ld hl,0x1800+3*32+12
+ ld hl,wellAddr
  ld b,20
 curtainRow:
  push bc

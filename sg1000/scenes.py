@@ -237,6 +237,14 @@ def generate(root, table, emit):
                         b"".join(k[plane] for k in tiles),
                     )
                 )
+        if label == "Legal":
+            # Use the common uppercase font in the blank area below the credits.
+            for row, text in [
+                (20, b"THIS IS AN UNOFFICIAL PORT"),
+                (22, b"NOT AN OFFICIAL TETRIS PRODUCT"),
+            ]:
+                start = row * 32 + (32 - len(text)) // 2
+                names[start : start + len(text)] = text
         blocks.append((0x1800, bytes(names)))
         print(f"scene{label}:")
         for addr, data in blocks:
